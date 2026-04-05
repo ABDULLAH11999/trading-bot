@@ -33,7 +33,7 @@ from bot_state import set_current_state
 from performance_reports import build_pdf_bytes, build_report_filename
 from pydantic import BaseModel
 from config import settings
-from smtp_mailer import SMTPConfig, format_smtp_delivery_error, send_access_code, send_registration_code
+from smtp_mailer import MailDeliveryConfig, format_mail_delivery_error, send_access_code, send_registration_code
 from stripe_billing import (
     SUBSCRIPTION_CURRENCY,
     SUBSCRIPTION_PRICE_CENTS,
@@ -575,7 +575,7 @@ async def auth_status(request: Request):
         "authenticated": _is_authenticated(request),
         "email": email,
         "user": _user_summary_payload(email) if email else None,
-        "smtp_configured": SMTPConfig().is_configured(),
+        "smtp_configured": MailDeliveryConfig().is_configured(),
         "stripe_configured": stripe_configured(),
         "subscription": subscription,
         "real_mode_fee": float(settings.REAL_MODE_FEE or 29),
@@ -592,8 +592,8 @@ async def auth_register(payload: RegisterRequest):
         raise HTTPException(status_code=400, detail="Please enter a valid email address.")
     if len(password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
-    if not SMTPConfig().is_configured():
-        raise HTTPException(status_code=500, detail="SMTP is not configured in .env.")
+    if not MailDeliveryConfig().is_configured():
+        raise HTTPException(status_code=500, detail="Mail delivery is not configured in .env.")
 
     existing = get_profile(email)
     if existing.get("email_verified") and existing.get("password_hash"):
@@ -606,7 +606,7 @@ async def auth_register(payload: RegisterRequest):
     except Exception as exc:
         raise HTTPException(
             status_code=502,
-            detail=f"Failed to send verification email: {format_smtp_delivery_error(exc)}",
+            detail=f"Failed to send verification email: {format_mail_delivery_error(exc)}",
         ) from exc
 
     save_profile(email, {
@@ -637,8 +637,8 @@ async def auth_resend_code(payload: ResendCodeRequest):
     profile = get_profile(email)
     if not profile.get("password_hash"):
         raise HTTPException(status_code=404, detail="No pending registration found for this email.")
-    if not SMTPConfig().is_configured():
-        raise HTTPException(status_code=500, detail="SMTP is not configured in .env.")
+    if not MailDeliveryConfig().is_configured():
+        raise HTTPException(status_code=500, detail="Mail delivery is not configured in .env.")
 
     now_ts = int(time.time())
     purpose = str((profile.get("verification") or {}).get("purpose") or "register").strip().lower() or "register"
@@ -656,7 +656,7 @@ async def auth_resend_code(payload: ResendCodeRequest):
     except Exception as exc:
         raise HTTPException(
             status_code=502,
-            detail=f"Failed to resend verification email: {format_smtp_delivery_error(exc)}",
+            detail=f"Failed to resend verification email: {format_mail_delivery_error(exc)}",
         ) from exc
 
     save_profile(email, {
@@ -738,8 +738,8 @@ async def auth_login(request: Request, payload: PasswordLogin):
         raise HTTPException(status_code=401, detail="Account not found. Please register first.")
     if not access_state.get("is_active"):
         if access_state.get("requires_reverify"):
-            if not SMTPConfig().is_configured():
-                raise HTTPException(status_code=500, detail="SMTP is not configured in .env.")
+            if not MailDeliveryConfig().is_configured():
+                raise HTTPException(status_code=500, detail="Mail delivery is not configured in .env.")
             code = f"{secrets.randbelow(9000) + 1000:04d}"
             now_ts = int(time.time())
             try:
@@ -747,7 +747,7 @@ async def auth_login(request: Request, payload: PasswordLogin):
             except Exception as exc:
                 raise HTTPException(
                     status_code=502,
-                    detail=f"Failed to send reactivation code: {format_smtp_delivery_error(exc)}",
+                    detail=f"Failed to send reactivation code: {format_mail_delivery_error(exc)}",
                 ) from exc
             save_profile(email, {
                 "verification": {
