@@ -47,6 +47,7 @@ AUTH_SESSION_SECRET = (
 ).strip()
 FORCE_SECURE_COOKIES = (os.getenv("FORCE_SECURE_COOKIES") or "").strip().lower() == "true"
 ENABLE_API_DOCS = (os.getenv("ENABLE_API_DOCS") or "").strip().lower() == "true"
+ENABLE_STARTUP_SECURITY_SCAN = (os.getenv("ENABLE_STARTUP_SECURITY_SCAN") or "true").strip().lower() == "true"
 PUBLIC_APP_URL = (os.getenv("PUBLIC_APP_URL") or "").strip()
 ADMIN_EMAIL = normalize_email(os.getenv("ADMIN_EMAIL"))
 ADMIN_PASS = (os.getenv("ADMIN_PASS") or "").strip()

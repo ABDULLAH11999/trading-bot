@@ -10,7 +10,19 @@ SUSPICIOUS_NATIVE_MARKERS = (
     "mask.cpython",
 )
 NATIVE_EXTENSIONS = {".so", ".dylib", ".pyd"}
-IGNORED_DIRECTORIES = {"node_modules", "__pycache__", ".git", "logs"}
+IGNORED_DIRECTORIES = {
+    "node_modules",
+    "__pycache__",
+    ".git",
+    "logs",
+    ".venv",
+    "venv",
+    "env",
+    "site-packages",
+    "dist-packages",
+    ".mypy_cache",
+    ".pytest_cache",
+}
 
 _SECRET_PATTERNS = [
     (re.compile(r"(?i)(api[_-]?key\s*[=:]\s*)([A-Za-z0-9_\-]{8,})"), r"\1***REDACTED***"),

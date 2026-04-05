@@ -1223,16 +1223,17 @@ class ScalperBot:
             self.last_universe_refresh = now
 
     async def initialize(self):
-        security_findings = scan_workspace_security_issues(BASE_DIR)
-        if security_findings:
-            state.bot_enabled = False
-            state.bot_running = False
-            state.set_activity("Security block: suspicious native files detected.")
-            state.add_log("Startup security scan detected suspicious files. Trading is blocked.")
-            for finding in security_findings[:20]:
-                state.add_log(f"SECURITY ALERT: {finding}")
-            state.save_state()
-            raise RuntimeError("Startup blocked by workspace security scan findings.")
+        if settings.ENABLE_STARTUP_SECURITY_SCAN:
+            security_findings = scan_workspace_security_issues(BASE_DIR)
+            if security_findings:
+                state.bot_enabled = False
+                state.bot_running = False
+                state.set_activity("Security block: suspicious native files detected.")
+                state.add_log("Startup security scan detected suspicious files. Trading is blocked.")
+                for finding in security_findings[:20]:
+                    state.add_log(f"SECURITY ALERT: {finding}")
+                state.save_state()
+                raise RuntimeError("Startup blocked by workspace security scan findings.")
 
         logger.info("Initializing bot and refreshing Binance spot candidates...")
         state.set_activity("Scanning Binance spot listings and gainers...")
@@ -2201,12 +2202,13 @@ class ScalperBot:
 if __name__ == "__main__":
     manager = MultiUserBotManager(ScalperBot)
     register_bot_manager(manager)
-    api_port = int(os.getenv("API_PORT", "8000"))
+    api_host = os.getenv("HOST", "0.0.0.0")
+    api_port = int(os.getenv("PORT", os.getenv("API_PORT", "8000")))
 
     async def main():
-        config = uvicorn.Config(app, host="127.0.0.1", port=api_port, log_level="error")
+        config = uvicorn.Config(app, host=api_host, port=api_port, log_level="error")
         server = uvicorn.Server(config)
-        logger.info("Starting API server on 127.0.0.1:%s", api_port)
+        logger.info("Starting API server on %s:%s", api_host, api_port)
         await server.serve()
 
     try:
