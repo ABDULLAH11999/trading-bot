@@ -33,7 +33,7 @@ from bot_state import set_current_state
 from performance_reports import build_pdf_bytes, build_report_filename
 from pydantic import BaseModel
 from config import settings
-from smtp_mailer import SMTPConfig, send_access_code, send_registration_code
+from smtp_mailer import SMTPConfig, format_smtp_delivery_error, send_access_code, send_registration_code
 from stripe_billing import (
     SUBSCRIPTION_CURRENCY,
     SUBSCRIPTION_PRICE_CENTS,
@@ -604,7 +604,10 @@ async def auth_register(payload: RegisterRequest):
     try:
         await send_registration_code(email, code)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Failed to send verification email: {exc}") from exc
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to send verification email: {format_smtp_delivery_error(exc)}",
+        ) from exc
 
     save_profile(email, {
         "password_hash": hash_password(password),
@@ -651,7 +654,10 @@ async def auth_resend_code(payload: ResendCodeRequest):
         else:
             await send_registration_code(email, code)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Failed to resend verification email: {exc}") from exc
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to resend verification email: {format_smtp_delivery_error(exc)}",
+        ) from exc
 
     save_profile(email, {
         "verification": {
@@ -739,7 +745,10 @@ async def auth_login(request: Request, payload: PasswordLogin):
             try:
                 await send_access_code(email, code, title="Reactivate your account", subtitle="Use this 4-digit code to reactivate your account and continue.")
             except Exception as exc:
-                raise HTTPException(status_code=502, detail=f"Failed to send reactivation code: {exc}") from exc
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Failed to send reactivation code: {format_smtp_delivery_error(exc)}",
+                ) from exc
             save_profile(email, {
                 "verification": {
                     "code_hash": hash_verification_code(email, code),

@@ -1,5 +1,6 @@
 import asyncio
 import os
+import socket
 import smtplib
 import ssl
 from email.message import EmailMessage
@@ -53,6 +54,44 @@ class SMTPConfig:
 
     def is_configured(self):
         return bool(self.host and self.port and self.from_email)
+
+
+def _is_render_runtime():
+    return bool(
+        str(os.getenv("RENDER") or "").strip()
+        or str(os.getenv("RENDER_SERVICE_ID") or "").strip()
+        or str(os.getenv("RENDER_EXTERNAL_HOSTNAME") or "").strip()
+    )
+
+
+def format_smtp_delivery_error(exc, cfg=None):
+    smtp_cfg = cfg or SMTPConfig()
+    text = " ".join(str(exc).split())
+    lowered = text.lower()
+    blocked_ports = {25, 465, 587}
+
+    if _is_render_runtime() and smtp_cfg.port in blocked_ports:
+        if (
+            "network is unreachable" in lowered
+            or "connection refused" in lowered
+            or "timed out" in lowered
+            or isinstance(exc, OSError)
+        ):
+            return (
+                f"SMTP delivery failed because this Render service cannot reach outbound SMTP on port {smtp_cfg.port}. "
+                "Render free web services block ports 25, 465, and 587. "
+                "Use a paid Render instance or switch email delivery to an HTTP-based provider API."
+            )
+
+    if isinstance(exc, socket.gaierror):
+        return f"SMTP host lookup failed for {smtp_cfg.host}. Please check MAIL_HOST."
+    if isinstance(exc, smtplib.SMTPAuthenticationError):
+        return "SMTP authentication failed. Please verify MAIL_USERNAME and MAIL_PASSWORD."
+    if isinstance(exc, TimeoutError) or "timed out" in lowered:
+        return f"SMTP connection to {smtp_cfg.host}:{smtp_cfg.port} timed out."
+    if "network is unreachable" in lowered:
+        return f"SMTP connection to {smtp_cfg.host}:{smtp_cfg.port} could not be reached from this server."
+    return text or "SMTP delivery failed."
 
 
 def _build_message(to_email, subject, text_body, html_body=""):
