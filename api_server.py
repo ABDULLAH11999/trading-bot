@@ -8,6 +8,7 @@ import time
 import uvicorn
 from pathlib import Path
 
+import aiohttp
 from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi import Query
@@ -69,6 +70,11 @@ print("BACKEND VERSION: 1.0.32 - READY")
 init_storage()
 mode_switch_handler = None
 bot_manager = None
+_PUBLIC_IP_CACHE = {
+    "value": "",
+    "checked_at": 0,
+    "source": "",
+}
 
 if settings.CORS_ALLOWED_ORIGINS:
     app.add_middleware(
@@ -426,6 +432,59 @@ async def get_status(request: Request):
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
+
+
+async def _fetch_public_server_ip():
+    now_ts = int(time.time())
+    if _PUBLIC_IP_CACHE["value"] and (now_ts - int(_PUBLIC_IP_CACHE["checked_at"] or 0) < 60):
+        return {
+            "public_ip": _PUBLIC_IP_CACHE["value"],
+            "checked_at": _PUBLIC_IP_CACHE["checked_at"],
+            "source": _PUBLIC_IP_CACHE["source"] or "cache",
+        }
+
+    providers = (
+        ("https://api.ipify.org?format=json", "ipify"),
+        ("https://ifconfig.me/all.json", "ifconfig.me"),
+    )
+    timeout = aiohttp.ClientTimeout(total=5)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        for url, source in providers:
+            try:
+                async with session.get(url, ssl=False) as response:
+                    if response.status != 200:
+                        continue
+                    payload = await response.json()
+                    ip_value = str(payload.get("ip_addr") or payload.get("ip") or "").strip()
+                    if not ip_value:
+                        continue
+                    _PUBLIC_IP_CACHE.update({
+                        "value": ip_value,
+                        "checked_at": now_ts,
+                        "source": source,
+                    })
+                    return {
+                        "public_ip": ip_value,
+                        "checked_at": now_ts,
+                        "source": source,
+                    }
+            except Exception:
+                continue
+    return {
+        "public_ip": "",
+        "checked_at": now_ts,
+        "source": "",
+    }
+
+
+@app.get("/server/network-info")
+async def server_network_info(request: Request):
+    _require_auth(request)
+    payload = await _fetch_public_server_ip()
+    return {
+        **payload,
+        "note": "Use this current server IP when configuring Binance API IP restrictions. Render can change egress IP after redeploys or restarts.",
+    }
 
 
 def register_mode_switch_handler(handler):
@@ -1128,7 +1187,7 @@ async def update_settings(request: Request, update: SettingsUpdate):
         runtime_state.add_log(f"Simulated balance set to: {update.test_balance}")
     if update.bot_enabled is not None:
         was_enabled = bool(runtime_state.bot_enabled)
-        target_mode = str(runtime_state.account_mode or account_mode or "test").strip().lower()
+        target_mode = str(account_mode or runtime_state.account_mode or "test").strip().lower()
         if update.bot_enabled and not was_enabled:
             if target_mode == "real":
                 await _sync_subscription_state(current_email, force=True)

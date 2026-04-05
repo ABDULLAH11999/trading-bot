@@ -29,6 +29,7 @@ const elements = {
     backToModeBtn: document.getElementById('back-to-mode-btn'),
     totalCommissions: document.getElementById('total-commissions'),
     accountBadge: document.getElementById('account-badge'),
+    serverIpBadge: document.getElementById('server-ip-badge'),
     apiModeBadge: document.getElementById('api-mode-badge'),
     apiModeSelect: document.getElementById('api-mode-select'),
     apiModeStatic: document.getElementById('api-mode-static'),
@@ -149,6 +150,10 @@ let pendingFavoriteSelections = new Set();
 let timeSlotsEnabled = false;
 let timeSlots = [];
 let bulkCloseNotice = '';
+let savedApiCredentialState = {
+    test: { hasKey: false, hasSecret: false },
+    real: { hasKey: false, hasSecret: false }
+};
 
 const LOGIN_DOCUMENTATION_HTML = `
     <section>
@@ -249,6 +254,35 @@ function formatSubscriptionFee() {
 
 function updateAccessState(access) {
     currentAccessState = access || null;
+}
+
+function updateSavedApiCredentialState(config) {
+    savedApiCredentialState = {
+        test: {
+            hasKey: Boolean(config?.test?.has_saved_key),
+            hasSecret: Boolean(config?.test?.has_saved_secret)
+        },
+        real: {
+            hasKey: Boolean(config?.real?.has_saved_key),
+            hasSecret: Boolean(config?.real?.has_saved_secret)
+        }
+    };
+}
+
+function hasCurrentTypedKeysForMode(mode) {
+    const activeMode = mode === 'real' ? 'real' : 'test';
+    const keyInput = activeMode === 'real' ? elements.realApiKey : elements.testApiKey;
+    const secretInput = activeMode === 'real' ? elements.realApiSecret : elements.testApiSecret;
+    return Boolean((keyInput?.value || '').trim()) && Boolean((secretInput?.value || '').trim());
+}
+
+function hasSavedKeysForMode(mode) {
+    const activeMode = mode === 'real' ? 'real' : 'test';
+    return Boolean(savedApiCredentialState?.[activeMode]?.hasKey) && Boolean(savedApiCredentialState?.[activeMode]?.hasSecret);
+}
+
+function hasUsableKeysForMode(mode) {
+    return hasCurrentTypedKeysForMode(mode) || hasSavedKeysForMode(mode);
 }
 
 function scrollToApiSectionWithMessage(message, mode = selectedDashboardMode || 'test') {
@@ -696,7 +730,12 @@ async function checkAuthStatus() {
         unlockApp(true);
         await loadApiConfig();
         await refreshBillingStatus();
+        await refreshServerIpBadge();
     } else {
+        if (elements.serverIpBadge) {
+            elements.serverIpBadge.textContent = 'Current IP: login required';
+            elements.serverIpBadge.title = '';
+        }
         lockApp('Login with your email and password to continue.');
     }
 }
@@ -723,6 +762,7 @@ async function loadApiConfig() {
         currentRealModeFee = Number(config.real_mode_fee || currentRealModeFee || 29);
         updateAccessState(config.access || null);
         updateSubscriptionUi(config.subscription || null);
+        updateSavedApiCredentialState(config);
 
         const activeMode = selectedDashboardMode || config.preferred_mode || 'test';
         if (elements.apiModeSelect) {
@@ -737,13 +777,41 @@ async function loadApiConfig() {
 
         if (elements.apiConfigStatus) {
             elements.apiConfigStatus.style.color = 'var(--text-secondary)';
-            elements.apiConfigStatus.textContent = `Logged in as ${currentUserEmail || 'session user'}. ${activeMode === 'real' ? 'Real' : 'Test'} keys shown below are encrypted and saved per email.`;
+            elements.apiConfigStatus.textContent = `Logged in as ${currentUserEmail || 'session user'}. ${activeMode === 'real' ? 'Real' : 'Test'} keys shown below are encrypted and saved per email.${hasSavedKeysForMode(activeMode) ? ' Saved keys are ready to use after refresh.' : ''}`;
         }
     } catch (error) {
         console.error('API config load failed:', error);
         if (elements.apiConfigStatus) {
             elements.apiConfigStatus.textContent = error.message || 'Failed to load API key settings.';
         }
+    }
+}
+
+async function refreshServerIpBadge() {
+    if (!elements.serverIpBadge) return;
+    if (!isAuthenticated && authRequired) {
+        elements.serverIpBadge.textContent = 'Current IP: login required';
+        elements.serverIpBadge.title = '';
+        return;
+    }
+    try {
+        const response = await fetch(`${API_URL}/server/network-info`);
+        if (response.status === 401) {
+            elements.serverIpBadge.textContent = 'Current IP: login required';
+            elements.serverIpBadge.title = '';
+            return;
+        }
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(payload.detail || 'Unable to fetch server IP.');
+        }
+        const ipValue = String(payload.public_ip || '').trim();
+        elements.serverIpBadge.textContent = ipValue ? `Current IP: ${ipValue}` : 'Current IP: unavailable';
+        elements.serverIpBadge.title = payload.note || '';
+    } catch (error) {
+        console.error('Server IP fetch failed:', error);
+        elements.serverIpBadge.textContent = 'Current IP: unavailable';
+        elements.serverIpBadge.title = 'Unable to fetch the current server IP right now.';
     }
 }
 
@@ -1014,8 +1082,9 @@ async function saveTradingPreferences(payload, successMessage) {
 }
 
 async function saveApiConfig() {
+    const saveMode = elements.apiModeSelect?.value || selectedDashboardMode || 'test';
     const payload = {
-        preferred_mode: elements.apiModeSelect?.value || 'test',
+        preferred_mode: saveMode,
         test: {
             api_key: elements.testApiKey?.value || '',
             api_secret: elements.testApiSecret?.value || ''
@@ -1067,6 +1136,7 @@ async function submitPassword(password, email) {
     await loadTradingPreferences();
     await loadFavoritePairOptions();
     await loadTimeSlots();
+    await refreshServerIpBadge();
 }
 
 async function registerUser(email, password) {
@@ -1107,6 +1177,7 @@ async function verifyRegistrationCode(email, code) {
     await loadTradingPreferences();
     await loadFavoritePairOptions();
     await loadTimeSlots();
+    await refreshServerIpBadge();
 }
 
 async function resendRegistrationCode(email) {
@@ -1133,7 +1204,15 @@ async function logoutUser() {
     pendingVerificationEmail = '';
     currentSubscription = null;
     currentAccessState = null;
+    savedApiCredentialState = {
+        test: { hasKey: false, hasSecret: false },
+        real: { hasKey: false, hasSecret: false }
+    };
     updateSubscriptionUi(null);
+    if (elements.serverIpBadge) {
+        elements.serverIpBadge.textContent = 'Current IP: login required';
+        elements.serverIpBadge.title = '';
+    }
     lockApp('Login with your email and password to continue.');
 }
 
@@ -1638,14 +1717,20 @@ document.addEventListener('click', (event) => {
 elements.botEnabledSelect.addEventListener('change', async (e) => {
     const nextEnabled = e.target.value === 'true';
     const previousValue = nextEnabled ? 'false' : 'true';
+    const targetMode = selectedDashboardMode === 'real' ? 'real' : 'test';
     try {
-        await sendUpdate({ bot_enabled: nextEnabled });
+        if (nextEnabled && !hasUsableKeysForMode(targetMode)) {
+            throw new Error(targetMode === 'real'
+                ? 'Please save your real Binance API key and secret before enabling the bot.'
+                : 'Please save your test Binance API key and secret before enabling the bot.');
+        }
+        await sendUpdate({ bot_enabled: nextEnabled, account_mode: targetMode });
     } catch (error) {
         elements.botEnabledSelect.value = previousValue;
         const message = error.message || 'Failed to update bot state.';
         const lowered = message.toLowerCase();
         if (nextEnabled && (lowered.includes('api key') || lowered.includes('api secret') || lowered.includes('save your'))) {
-            const isReal = selectedDashboardMode === 'real';
+            const isReal = targetMode === 'real';
             scrollToApiSectionWithMessage(
                 isReal
                     ? 'Set your real API keys in Api Keys section below before enabling bot state.'
@@ -2362,6 +2447,10 @@ async function bootApp() {
             }
         }
     } catch (error) {
+        if (elements.serverIpBadge) {
+            elements.serverIpBadge.textContent = 'Current IP: unavailable';
+            elements.serverIpBadge.title = '';
+        }
         lockApp('Unable to verify access. Please retry.');
         console.error('App boot failed:', error);
     }
