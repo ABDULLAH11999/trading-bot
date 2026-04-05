@@ -116,6 +116,22 @@ def _auth_required():
     return True
 
 
+async def _ensure_bot_manager_ready():
+    global bot_manager
+    if bot_manager is not None:
+        return bot_manager
+    from main import ScalperBot
+    from bot_manager import MultiUserBotManager
+    manager = MultiUserBotManager(ScalperBot)
+    register_bot_manager(manager)
+    return manager
+
+
+@app.on_event("startup")
+async def _startup_bot_manager():
+    await _ensure_bot_manager_ready()
+
+
 def _auth_secret():
     base_secret = settings.AUTH_SESSION_SECRET or "email-allowlist-only"
     return hashlib.sha256(base_secret.encode("utf-8")).hexdigest()
@@ -254,6 +270,7 @@ def _runtime_email(email):
 
 async def _state_for_request(request: Request):
     email = _current_user_email(request)
+    await _ensure_bot_manager_ready()
     if bot_manager is None:
         raise HTTPException(status_code=503, detail="Bot manager is not ready yet.")
     runtime_state = await bot_manager.get_state(email)
