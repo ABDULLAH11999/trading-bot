@@ -1,0 +1,57 @@
+{
+  "name": "crypto-scalper-bot",
+  "version": "1.0.32",
+  "description": "Binance Trading Dashboard",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder -w",
+    "dist:win": "electron-builder --win nsis",
+    "pack": "electron-builder --dir"
+  },
+  "author": "TradingTools AI",
+  "build": {
+    "appId": "com.trading.scalper",
+    "productName": "Scalper Trading Bot",
+    "asar": false,
+    "files": [
+      "main.js",
+      "main.py",
+      "api_server.py",
+      "bot_state.py",
+      "performance_reports.py",
+      "app_storage.py",
+      "smtp_mailer.py",
+      "stripe_billing.py",
+      "user_profiles.py",
+      "loading.html",
+      "requirements.txt",
+      ".env",
+      ".env.example",
+      "frontend/**/*",
+      "config/**/*",
+      "data/**/*",
+      "exchange/**/*",
+      "execution/**/*",
+      "indicators/**/*",
+      "logs/performance_logger.py",
+      "risk/**/*",
+      "strategy/**/*",
+      "!**/__pycache__/**",
+      "!dist/**",
+      "!logs/trading.log",
+      "!test_*.py"
+    ],
+    "win": {
+      "target": "nsis",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "directories": {
+      "output": "dist"
+    }
+  },
+  "devDependencies": {
+    "electron": "^34.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}

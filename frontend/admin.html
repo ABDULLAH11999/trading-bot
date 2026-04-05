@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scalper Bot Admin</title>
+    <link rel="stylesheet" href="admin.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="admin-login-view" class="admin-login-shell">
+        <div class="admin-login-card">
+            <span class="admin-kicker">Admin Access</span>
+            <h1>BinanceSpotAi Control Panel</h1>
+            <p>Sign in with the admin email and password from your env file.</p>
+            <form id="admin-login-form" class="admin-form">
+                <input id="admin-email" type="email" placeholder="Admin email" autocomplete="username">
+                <input id="admin-password" type="password" placeholder="Admin password" autocomplete="current-password">
+                <button id="admin-login-btn" type="submit" class="primary-btn">Enter Admin Dashboard</button>
+            </form>
+            <div id="admin-login-error" class="admin-error"></div>
+        </div>
+    </div>
+
+    <div id="admin-app-view" class="admin-app" style="display:none;">
+        <aside class="admin-sidebar">
+            <div>
+                <span class="admin-kicker">Admin Panel</span>
+                <h2>Scalper Bot</h2>
+            </div>
+            <nav class="admin-nav">
+                <button class="admin-nav-btn active" data-tab="users">Manage Users</button>
+                <button class="admin-nav-btn" data-tab="payments">Manage Payments</button>
+            </nav>
+            <button id="admin-logout-btn" class="ghost-btn">Logout</button>
+        </aside>
+
+        <main class="admin-main">
+            <header class="admin-header">
+                <div>
+                    <h1>Admin Dashboard</h1>
+                    <p>Manage user access, real mode privileges, and Stripe payments.</p>
+                </div>
+            </header>
+
+            <section class="stats-grid">
+                <div class="stat-card">
+                    <span>Total Users</span>
+                    <strong id="stat-total-users">0</strong>
+                </div>
+                <div class="stat-card">
+                    <span>Paid Users</span>
+                    <strong id="stat-paid-users">0</strong>
+                </div>
+                <div class="stat-card">
+                    <span>Total Payments</span>
+                    <strong id="stat-total-payments">0</strong>
+                </div>
+                <div class="stat-card">
+                    <span>Subscription Fee</span>
+                    <strong id="stat-real-fee">$0</strong>
+                </div>
+            </section>
+
+            <section id="admin-users-tab" class="admin-tab">
+                <div class="panel-head">
+                    <h3>Manage Users</h3>
+                    <input id="admin-user-search" class="admin-search" type="text" placeholder="Search by user email">
+                </div>
+                <div class="table-wrap">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Email</th>
+                                <th>Status</th>
+                                <th>Verification</th>
+                                <th>Real Mode</th>
+                                <th>Paid</th>
+                                <th>Subscription End</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-users-body"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="admin-payments-tab" class="admin-tab" style="display:none;">
+                <div class="panel-head">
+                    <h3>Manage Payments</h3>
+                    <input id="admin-payment-search" class="admin-search" type="text" placeholder="Search by payment email">
+                </div>
+                <div class="table-wrap">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Email</th>
+                                <th>Amount</th>
+                                <th>Date</th>
+                                <th>Payment Intent</th>
+                                <th>Subscription</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-payments-body"></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+ccxt
+pandas
+numpy
+ta-lib
+websockets
+asyncio
+python-dotenv
+aiohttp
+fastapi
+uvicorn
+cryptography
