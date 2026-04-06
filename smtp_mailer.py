@@ -75,8 +75,10 @@ class MailDeliveryConfig:
         ).strip().lower()
         self.from_email = (
             os.getenv("MAIL_FROM_ADDRESS")
+            or os.getenv("RESEND_FROM_ADDRESS")
             or os.getenv("SMTP_FROM_EMAIL")
             or os.getenv("RESEND_FROM_EMAIL")
+            or os.getenv("FROM_EMAIL")
             or os.getenv("BREVO_FROM_EMAIL")
             or os.getenv("MAIL_USERNAME")
             or ""
@@ -123,10 +125,20 @@ def format_mail_delivery_error(exc, cfg=None):
     lowered = text.lower()
 
     if provider == "resend":
-        if "401" in lowered or "403" in lowered:
+        if "missing api key" in lowered or "invalid api key" in lowered or "api key is invalid" in lowered:
             return "Resend authentication failed. Please verify RESEND_API_KEY."
-        if "domain" in lowered and ("verify" in lowered or "not found" in lowered):
-            return "Resend rejected the sender domain. Verify your sending domain or use a valid RESEND_FROM_EMAIL."
+        if "403" in lowered and ("api key" in lowered or "authorization" in lowered or "unauthorized" in lowered):
+            return "Resend authentication failed. Please verify RESEND_API_KEY."
+        if "401" in lowered or "403" in lowered:
+            return (
+                "Resend rejected this request. Verify RESEND_API_KEY and make sure "
+                "MAIL_FROM_ADDRESS is a sender allowed by your Resend account."
+            )
+        if ("domain" in lowered and ("verify" in lowered or "not found" in lowered)) or ("sender" in lowered and ("verify" in lowered or "unauthorized" in lowered or "invalid" in lowered)):
+            return (
+                "Resend rejected the sender email/domain. Verify your sending domain in Resend "
+                "or use a valid MAIL_FROM_ADDRESS such as onboarding@resend.dev for testing."
+            )
         return text or "Resend email delivery failed."
 
     if provider == "brevo":
@@ -268,6 +280,10 @@ async def send_message(to_email, subject, text_body, html_body=""):
 
     provider = cfg.selected_provider()
     if provider == "resend":
+        if not cfg.resend_api_key:
+            raise RuntimeError("RESEND_API_KEY is missing.")
+        if not cfg.from_email:
+            raise RuntimeError("MAIL_FROM_ADDRESS is missing for Resend delivery.")
         await _send_with_resend(payload, cfg)
         return
     if provider == "brevo":
