@@ -73,6 +73,7 @@ class MailDeliveryConfig:
             or os.getenv("EMAIL_PROVIDER")
             or "auto"
         ).strip().lower()
+        self.allow_fallback = _smtp_bool("MAIL_FALLBACK") or _smtp_bool("MAIL_FALLBACK_ENABLED")
         self.from_email = (
             os.getenv("MAIL_FROM_ADDRESS")
             or os.getenv("RESEND_FROM_ADDRESS")
@@ -229,6 +230,7 @@ async def _send_with_resend(payload, cfg):
     headers = {
         "Authorization": f"Bearer {cfg.resend_api_key}",
         "Content-Type": "application/json",
+        "User-Agent": "scalper-bot/1.0",
     }
     body = {
         "from": f"{payload['from_name']} <{payload['from_email']}>" if payload["from_name"] else payload["from_email"],
@@ -284,11 +286,35 @@ async def send_message(to_email, subject, text_body, html_body=""):
             raise RuntimeError("RESEND_API_KEY is missing.")
         if not cfg.from_email:
             raise RuntimeError("MAIL_FROM_ADDRESS is missing for Resend delivery.")
-        await _send_with_resend(payload, cfg)
-        return
+        try:
+            await _send_with_resend(payload, cfg)
+            return
+        except Exception as exc:
+            if cfg.allow_fallback and cfg.brevo_api_key:
+                try:
+                    await _send_with_brevo(payload, cfg)
+                    return
+                except Exception as brevo_exc:
+                    raise RuntimeError(
+                        f"Resend failed ({format_mail_delivery_error(exc, cfg=cfg)}). "
+                        f"Brevo fallback also failed ({format_mail_delivery_error(brevo_exc, cfg=cfg)})."
+                    ) from brevo_exc
+            raise
     if provider == "brevo":
-        await _send_with_brevo(payload, cfg)
-        return
+        try:
+            await _send_with_brevo(payload, cfg)
+            return
+        except Exception as exc:
+            if cfg.allow_fallback and cfg.resend_api_key:
+                try:
+                    await _send_with_resend(payload, cfg)
+                    return
+                except Exception as resend_exc:
+                    raise RuntimeError(
+                        f"Brevo failed ({format_mail_delivery_error(exc, cfg=cfg)}). "
+                        f"Resend fallback also failed ({format_mail_delivery_error(resend_exc, cfg=cfg)})."
+                    ) from resend_exc
+            raise
 
     message = _build_smtp_message(payload)
     await asyncio.to_thread(_send_message_sync, message)
