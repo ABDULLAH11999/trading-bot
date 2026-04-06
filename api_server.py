@@ -537,6 +537,10 @@ class AdminUserUpdateRequest(BaseModel):
     real_mode_enabled: bool | None = None
 
 
+class AdminTestEmailRequest(BaseModel):
+    to_email: str = ""
+
+
 class CredentialPair(BaseModel):
     api_key: str = ""
     api_secret: str = ""
@@ -969,6 +973,27 @@ async def admin_auth_logout():
     response = JSONResponse({"status": "success"})
     response.delete_cookie(ADMIN_COOKIE_NAME)
     return response
+
+
+@app.post("/admin/test-email")
+async def admin_test_email(request: Request, payload: AdminTestEmailRequest):
+    _require_admin(request)
+    to_email = normalize_email(payload.to_email)
+    if not to_email:
+        raise HTTPException(status_code=400, detail="Email is required.")
+    try:
+        await send_access_code(
+            to_email,
+            "1234",
+            title="Test Email",
+            subtitle="This is a test message from the Scalper Bot service.",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to send test email: {format_mail_delivery_error(exc)}",
+        ) from exc
+    return {"status": "sent", "email": to_email}
 
 
 def _admin_users_payload():
