@@ -743,7 +743,9 @@ async function checkAuthStatus() {
 function applyMaskedPlaceholder(input, maskedValue) {
     if (!input) return;
     input.value = '';
-    input.placeholder = maskedValue || '';
+    const placeholderText = maskedValue ? `Saved: ${maskedValue}` : '';
+    input.placeholder = placeholderText;
+    input.title = placeholderText || 'No saved key for this field yet.';
 }
 
 async function loadApiConfig() {
