@@ -80,7 +80,6 @@ class BotState:
         self.start_time: float = time.time()
 
         self.load_state()
-        self.bot_enabled = False
 
     def _resolve_state_file(self):
         if not self.user_email:
