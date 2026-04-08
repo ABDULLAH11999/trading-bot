@@ -71,6 +71,7 @@ class ScalperBot:
         self.last_stream_message_at = time.time()
         self.adaptive_state_label = None
         self._last_time_slot_active = None
+        self._last_stream_status = {"message": "", "at": 0.0}
         self.manual_close_wait_logged_at = {}
         self.session_anchor_timestamp = 0.0
         self.session_anchor_day = None
@@ -87,6 +88,22 @@ class ScalperBot:
             runtime_summary["selected_account_mode"],
             runtime_summary["api_key_masked"],
         )
+
+    def _on_stream_status(self, level, message):
+        text = str(message or "").strip()
+        if not text:
+            return
+        now = time.time()
+        last_message = str(self._last_stream_status.get("message") or "")
+        last_at = float(self._last_stream_status.get("at") or 0.0)
+        if text == last_message and (now - last_at) < 20:
+            return
+        self._last_stream_status["message"] = text
+        self._last_stream_status["at"] = now
+
+        if str(level).lower() == "error":
+            state.set_activity("Waiting for Binance websocket connection. Retrying automatically...")
+        state.add_log(text)
 
     def _load_user_preferences(self):
         profile = get_profile(self.user_email)
@@ -2174,6 +2191,7 @@ class ScalperBot:
                     self.trading_symbols,
                     self.on_candle_update,
                     self.on_orderbook_update,
+                    on_status=self._on_stream_status,
                 )
 
                 state.bot_running = True
