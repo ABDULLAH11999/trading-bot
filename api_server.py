@@ -29,7 +29,7 @@ from app_storage import (
     record_payment,
     set_user_admin_state,
 )
-from bot_state import set_current_state
+from bot_state import BotState, set_current_state
 from performance_reports import build_pdf_bytes, build_report_filename
 from pydantic import BaseModel
 from config import settings
@@ -133,9 +133,30 @@ async def _ensure_bot_manager_ready():
     return manager
 
 
+async def _resume_enabled_user_bots():
+    manager = await _ensure_bot_manager_ready()
+    resumed = 0
+    for profile in list_profiles():
+        email = normalize_email(profile.get("email"))
+        if not email:
+            continue
+        try:
+            saved_state = BotState(user_email=email)
+            should_resume = bool(saved_state.bot_enabled or saved_state.active_trades)
+            if not should_resume:
+                continue
+            await manager.ensure_user_bot(email)
+            resumed += 1
+        except Exception:
+            # Continue booting even if one user's runtime cannot be restored.
+            pass
+    return resumed
+
+
 @app.on_event("startup")
 async def _startup_bot_manager():
     await _ensure_bot_manager_ready()
+    await _resume_enabled_user_bots()
 
 
 def _auth_secret():
