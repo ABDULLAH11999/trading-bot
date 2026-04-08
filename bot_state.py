@@ -7,9 +7,10 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from user_profiles import normalize_email, user_data_dir
 from security.hardening import redact_sensitive_text
+from storage_paths import migrate_legacy_file
 
 BASE_DIR = Path(__file__).resolve().parent
-STATE_FILE = BASE_DIR / "data" / "state.json"
+STATE_FILE = migrate_legacy_file("state.json")
 REPORT_RANGE_SECONDS = {
     "last_hour": 3600,
     "last_day": 86400,
