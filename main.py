@@ -2163,40 +2163,54 @@ class ScalperBot:
 
     async def run(self):
         set_current_state(self.state)
-        try:
-            await self.initialize()
-            self.startup_error = None
-            self.ready_event.set()
-            self.stream = MarketStream(
-                self.trading_symbols,
-                self.on_candle_update,
-                self.on_orderbook_update,
-            )
+        retry_delay = 10
+        while True:
+            should_stop = False
+            try:
+                await self.initialize()
+                self.startup_error = None
+                self.ready_event.set()
+                self.stream = MarketStream(
+                    self.trading_symbols,
+                    self.on_candle_update,
+                    self.on_orderbook_update,
+                )
 
-            state.bot_running = True
-            logger.info("Starting live trading streams...")
-            await asyncio.gather(
-                self.stream.connect(),
-                self.monitor_loop(),
-            )
-        except KeyboardInterrupt:
-            logger.info("Shutting down gracefully...")
-        except Exception as exc:
-            self.startup_error = str(exc)
-            self.ready_event.set()
-            state.bot_running = False
-            state.bot_enabled = False
-            state.set_activity("Waiting for Binance connection. Open the app logs for details.")
-            state.add_log(f"Startup paused: {exc}")
-            state.save_state()
-            logger.exception("Bot startup failed")
-            while True:
-                await asyncio.sleep(60)
-        finally:
-            if self.stream:
-                await self.stream.disconnect()
-            await self.market_discovery.close()
-            await self.exchange.close()
+                state.bot_running = True
+                logger.info("Starting live trading streams...")
+                retry_delay = 10
+                await asyncio.gather(
+                    self.stream.connect(),
+                    self.monitor_loop(),
+                )
+                raise RuntimeError("Trading streams stopped unexpectedly.")
+            except KeyboardInterrupt:
+                logger.info("Shutting down gracefully...")
+                should_stop = True
+            except Exception as exc:
+                self.startup_error = str(exc)
+                self.ready_event.set()
+                state.bot_running = False
+                state.set_activity("Waiting for Binance connection. Retrying automatically...")
+                state.add_log(f"Runtime paused: {exc}")
+                state.add_log(f"Auto-retry scheduled in {retry_delay}s.")
+                state.save_state()
+                logger.exception("Bot runtime failed; retrying in %ss", retry_delay)
+            finally:
+                if self.stream:
+                    await self.stream.disconnect()
+                    self.stream = None
+                await self.market_discovery.close()
+                await self.exchange.close()
+
+            if should_stop:
+                break
+
+            await asyncio.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, 120)
+            self.exchange = self._build_exchange_client(state.account_mode, user_email=self.user_email)
+            self.executor.exchange_client = self.exchange
+            self.market_discovery = MarketDiscovery(settings)
 
 
 if __name__ == "__main__":
