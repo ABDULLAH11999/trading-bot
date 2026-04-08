@@ -1,11 +1,10 @@
 import sqlite3
 import threading
 import time
-from pathlib import Path
+from storage_paths import migrate_legacy_file
 
 
-BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "data" / "app.db"
+DB_PATH = migrate_legacy_file("app.db")
 _LOCK = threading.RLock()
 
 
