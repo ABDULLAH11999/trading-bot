@@ -3,6 +3,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import secrets
 import time
 import uvicorn
@@ -60,6 +61,7 @@ from user_profiles import (
 BASE_DIR = Path(__file__).resolve().parent
 AUTH_COOKIE_NAME = "scalper_bot_auth"
 ADMIN_COOKIE_NAME = "scalper_bot_admin"
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     docs_url="/docs" if settings.ENABLE_API_DOCS else None,
@@ -134,8 +136,13 @@ async def _ensure_bot_manager_ready():
 
 
 async def _resume_enabled_user_bots():
+    if not settings.AUTO_RESUME_USER_BOTS:
+        logger.info("AUTO_RESUME_USER_BOTS is disabled; skipping startup bot resume.")
+        return 0
+
     manager = await _ensure_bot_manager_ready()
     resumed = 0
+    limit = int(settings.AUTO_RESUME_USER_BOT_LIMIT or 0)
     for profile in list_profiles():
         email = normalize_email(profile.get("email"))
         if not email:
@@ -147,15 +154,18 @@ async def _resume_enabled_user_bots():
                 continue
             await manager.ensure_user_bot(email)
             resumed += 1
+            if limit > 0 and resumed >= limit:
+                logger.info("Startup bot resume limit reached (%s).", limit)
+                break
         except Exception:
             # Continue booting even if one user's runtime cannot be restored.
             pass
+    logger.info("Startup bot resume complete; resumed=%s limit=%s", resumed, limit)
     return resumed
 
 
 @app.on_event("startup")
 async def _startup_bot_manager():
-    await _ensure_bot_manager_ready()
     await _resume_enabled_user_bots()
 
 
