@@ -437,5 +437,5 @@ SIMULATED_COMMISSION = SIMULATED_COMMISSION_BASE  # Backward-compatible alias
 POSITION_SIZE_CAP = 0.98
 
 # System settings
-WS_URL = "wss://stream.binance.com:9443"
+WS_URL = (os.getenv("BINANCE_WS_URL") or "wss://stream.binance.com:443").strip()
 LOG_LEVEL = "INFO"
