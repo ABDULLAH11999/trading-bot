@@ -239,6 +239,57 @@ def subscription_is_active(subscription):
     return end_ts == 0 or end_ts > now_ts
 
 
+def _merge_profile(normalized, profile):
+    if not normalized:
+        return _default_profile("")
+    if not isinstance(profile, dict):
+        return _default_profile(normalized)
+
+    merged = _default_profile(normalized)
+    merged["password_hash"] = str(profile.get("password_hash") or "").strip()
+    merged["email_verified"] = bool(profile.get("email_verified", False))
+
+    stored_verification = profile.get("verification") or {}
+    merged["verification"]["code_hash"] = str(stored_verification.get("code_hash") or "").strip()
+    merged["verification"]["expires_at"] = int(stored_verification.get("expires_at") or 0)
+    merged["verification"]["last_sent_at"] = int(stored_verification.get("last_sent_at") or 0)
+    merged["verification"]["attempts"] = int(stored_verification.get("attempts") or 0)
+    merged["verification"]["purpose"] = str(stored_verification.get("purpose") or "").strip()
+
+    stored_subscription = profile.get("subscription") or {}
+    merged["subscription"]["customer_id"] = str(stored_subscription.get("customer_id") or "").strip()
+    merged["subscription"]["subscription_id"] = str(stored_subscription.get("subscription_id") or "").strip()
+    merged["subscription"]["checkout_session_id"] = str(stored_subscription.get("checkout_session_id") or "").strip()
+    merged["subscription"]["status"] = str(stored_subscription.get("status") or "inactive").strip().lower()
+    merged["subscription"]["current_period_end"] = int(stored_subscription.get("current_period_end") or 0)
+    merged["subscription"]["current_period_start"] = int(stored_subscription.get("current_period_start") or 0)
+    merged["subscription"]["cancel_at_period_end"] = bool(stored_subscription.get("cancel_at_period_end", False))
+    merged["subscription"]["last_synced_at"] = int(stored_subscription.get("last_synced_at") or 0)
+
+    merged["preferred_mode"] = str(profile.get("preferred_mode") or "test").strip().lower()
+    if merged["preferred_mode"] not in {"test", "real"}:
+        merged["preferred_mode"] = "test"
+
+    merged["favorite_pairs_enabled"] = bool(profile.get("favorite_pairs_enabled", False))
+    merged["favorite_pairs"] = [
+        str(symbol or "").strip().upper()
+        for symbol in (profile.get("favorite_pairs") or [])
+        if str(symbol or "").strip()
+    ]
+    merged["time_slots_enabled"] = bool(profile.get("time_slots_enabled", False))
+    try:
+        merged["time_slots"] = normalize_time_slots(profile.get("time_slots") or [])
+    except ValueError:
+        merged["time_slots"] = []
+
+    stored_credentials = profile.get("credentials") or {}
+    for mode in ("test", "real"):
+        mode_credentials = stored_credentials.get(mode) or {}
+        merged["credentials"][mode]["api_key"] = _decrypt_secret(mode_credentials.get("api_key"))
+        merged["credentials"][mode]["api_secret"] = _decrypt_secret(mode_credentials.get("api_secret"))
+    return merged
+
+
 def get_profile(email):
     normalized = normalize_email(email)
     if not normalized:
@@ -246,46 +297,7 @@ def get_profile(email):
 
     with _LOCK:
         all_profiles = _load_all()
-        profile = all_profiles.get(normalized)
-        if not isinstance(profile, dict):
-            return _default_profile(normalized)
-
-        merged = _default_profile(normalized)
-        merged["password_hash"] = str(profile.get("password_hash") or "").strip()
-        merged["email_verified"] = bool(profile.get("email_verified", False))
-        stored_verification = profile.get("verification") or {}
-        merged["verification"]["code_hash"] = str(stored_verification.get("code_hash") or "").strip()
-        merged["verification"]["expires_at"] = int(stored_verification.get("expires_at") or 0)
-        merged["verification"]["last_sent_at"] = int(stored_verification.get("last_sent_at") or 0)
-        merged["verification"]["attempts"] = int(stored_verification.get("attempts") or 0)
-        merged["verification"]["purpose"] = str(stored_verification.get("purpose") or "").strip()
-        stored_subscription = profile.get("subscription") or {}
-        merged["subscription"]["customer_id"] = str(stored_subscription.get("customer_id") or "").strip()
-        merged["subscription"]["subscription_id"] = str(stored_subscription.get("subscription_id") or "").strip()
-        merged["subscription"]["checkout_session_id"] = str(stored_subscription.get("checkout_session_id") or "").strip()
-        merged["subscription"]["status"] = str(stored_subscription.get("status") or "inactive").strip().lower()
-        merged["subscription"]["current_period_end"] = int(stored_subscription.get("current_period_end") or 0)
-        merged["subscription"]["current_period_start"] = int(stored_subscription.get("current_period_start") or 0)
-        merged["subscription"]["cancel_at_period_end"] = bool(stored_subscription.get("cancel_at_period_end", False))
-        merged["subscription"]["last_synced_at"] = int(stored_subscription.get("last_synced_at") or 0)
-        merged["preferred_mode"] = str(profile.get("preferred_mode") or "test").strip().lower()
-        merged["favorite_pairs_enabled"] = bool(profile.get("favorite_pairs_enabled", False))
-        merged["favorite_pairs"] = [
-            str(symbol or "").strip().upper()
-            for symbol in (profile.get("favorite_pairs") or [])
-            if str(symbol or "").strip()
-        ]
-        merged["time_slots_enabled"] = bool(profile.get("time_slots_enabled", False))
-        try:
-            merged["time_slots"] = normalize_time_slots(profile.get("time_slots") or [])
-        except ValueError:
-            merged["time_slots"] = []
-        stored_credentials = profile.get("credentials") or {}
-        for mode in ("test", "real"):
-            mode_credentials = stored_credentials.get(mode) or {}
-            merged["credentials"][mode]["api_key"] = _decrypt_secret(mode_credentials.get("api_key"))
-            merged["credentials"][mode]["api_secret"] = _decrypt_secret(mode_credentials.get("api_secret"))
-        return merged
+        return _merge_profile(normalized, all_profiles.get(normalized))
 
 
 def save_profile(email, updates):
@@ -364,4 +376,10 @@ def save_profile(email, updates):
 def list_profiles():
     with _LOCK:
         all_profiles = _load_all()
-        return [get_profile(email) for email in sorted(all_profiles.keys())]
+        profiles = []
+        for email in sorted(all_profiles.keys()):
+            normalized = normalize_email(email)
+            if not normalized:
+                continue
+            profiles.append(_merge_profile(normalized, all_profiles.get(email)))
+        return profiles
