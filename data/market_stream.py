@@ -8,10 +8,11 @@ logger = logging.getLogger(__name__)
 
 
 class MarketStream:
-    def __init__(self, symbols, on_candle_update, on_orderbook_update):
+    def __init__(self, symbols, on_candle_update, on_orderbook_update, on_status=None):
         self.symbols = list(symbols)
         self.on_candle_update = on_candle_update
         self.on_orderbook_update = on_orderbook_update
+        self.on_status = on_status
         self.ws = None
         self.symbol_version = 0
         self.pending_tasks = set()
@@ -45,6 +46,14 @@ class MarketStream:
 
         task.add_done_callback(_cleanup)
 
+    def _notify_status(self, level, message):
+        if not self.on_status:
+            return
+        try:
+            self.on_status(level, message)
+        except Exception:
+            pass
+
     async def connect(self):
         while True:
             if not self.symbols:
@@ -59,9 +68,11 @@ class MarketStream:
                 async with websockets.connect(full_url, ping_interval=20, ping_timeout=20) as ws:
                     self.ws = ws
                     logger.info("Websocket connected.")
+                    self._notify_status("info", "Websocket connected to Binance streams.")
                     while True:
                         if version != self.symbol_version:
                             logger.info("Trading universe changed. Reconnecting websocket streams.")
+                            self._notify_status("info", "Trading universe changed. Reconnecting websocket streams.")
                             await ws.close()
                             break
 
@@ -76,10 +87,12 @@ class MarketStream:
                             self._track_task(self.on_orderbook_update(payload, stream_name))
             except asyncio.TimeoutError:
                 logger.warning("Websocket stalled. Reconnecting in 3s...")
+                self._notify_status("warning", "Websocket stalled. Reconnecting in 3 seconds.")
                 self.ws = None
                 await asyncio.sleep(3)
             except Exception as e:
                 logger.error("Websocket error: %s. Reconnecting in 3s...", e)
+                self._notify_status("error", f"Websocket error: {e}. Reconnecting in 3 seconds.")
                 self.ws = None
                 await asyncio.sleep(3)
 
