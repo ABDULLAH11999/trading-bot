@@ -10,9 +10,10 @@ import time
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
+from storage_paths import DATA_DIR, migrate_legacy_file, migrate_legacy_tree
 
 BASE_DIR = Path(__file__).resolve().parent
-USER_PROFILES_FILE = BASE_DIR / "data" / "user_profiles.json"
+USER_PROFILES_FILE = migrate_legacy_file("user_profiles.json")
 _LOCK = threading.RLock()
 _TIME_PATTERN = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 _MINUTES_PER_DAY = 24 * 60
@@ -49,7 +50,8 @@ def email_storage_key(email):
 
 
 def user_data_dir(email):
-    return BASE_DIR / "data" / "users" / email_storage_key(email)
+    migrate_legacy_tree("users")
+    return DATA_DIR / "users" / email_storage_key(email)
 
 
 def _default_profile(email):
