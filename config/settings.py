@@ -52,6 +52,7 @@ PUBLIC_APP_URL = (os.getenv("PUBLIC_APP_URL") or "").strip()
 ADMIN_EMAIL = normalize_email(os.getenv("ADMIN_EMAIL"))
 ADMIN_PASS = (os.getenv("ADMIN_PASS") or "").strip()
 REAL_MODE_FEE = float((os.getenv("REAL_MODE_FEE") or "29").strip() or "29")
+IS_RENDER = bool((os.getenv("RENDER") or "").strip())
 
 
 def _parse_allowed_emails(raw_value):
@@ -78,8 +79,33 @@ def _parse_string_list(raw_value):
     return [str(item).strip() for item in str(raw_value).split(",") if str(item).strip()]
 
 
+def _parse_bool(raw_value, default=False):
+    if raw_value is None:
+        return bool(default)
+    text = str(raw_value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return bool(default)
+
+
+def _parse_int(raw_value, default=0, minimum=0):
+    try:
+        parsed = int(str(raw_value).strip())
+    except Exception:
+        parsed = int(default)
+    return max(int(minimum), parsed)
+
+
 CORS_ALLOWED_ORIGINS = _parse_string_list(os.getenv("CORS_ALLOWED_ORIGINS"))
 APP_ALLOWED_HOSTS = _parse_string_list(os.getenv("APP_ALLOWED_HOSTS"))
+AUTO_RESUME_USER_BOTS = _parse_bool(os.getenv("AUTO_RESUME_USER_BOTS"), default=not IS_RENDER)
+AUTO_RESUME_USER_BOT_LIMIT = _parse_int(
+    os.getenv("AUTO_RESUME_USER_BOT_LIMIT"),
+    default=(1 if IS_RENDER else 0),
+    minimum=0,
+)
 
 
 def has_live_keys():
